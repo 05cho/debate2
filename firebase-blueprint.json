@@ -1,0 +1,76 @@
+{
+  "entities": {
+    "Discussion": {
+      "title": "Discussion",
+      "description": "Classroom discussion agenda and configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "mode": { "type": "string", "enum": ["pro_con", "free_notes", "three_step"] },
+        "currentStage": { "type": "number", "enum": [1, 2, 3] },
+        "isActive": { "type": "boolean" },
+        "allowSubmissions": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "title", "mode", "isActive"]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "Student debate post or opinion card",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "discussionId": { "type": "string" },
+        "mode": { "type": "string", "enum": ["pro_con", "free_notes", "three_step"] },
+        "authorId": { "type": "string" },
+        "anonymousName": { "type": "string", "maxLength": 50 },
+        "avatar": { "type": "string", "maxLength": 10 },
+        "content": { "type": "string", "maxLength": 300 },
+        "stance": { "type": "string", "enum": ["agree", "disagree", "neutral"] },
+        "color": { "type": "string", "enum": ["yellow", "pink", "mint", "lavender", "blue", "peach"] },
+        "stage": { "type": "number", "enum": [1, 2, 3] },
+        "replyToPostId": { "type": "string" },
+        "replyToSummary": { "type": "string", "maxLength": 100 },
+        "likes": { "type": "number" },
+        "likedBy": { "type": "array" },
+        "commentsCount": { "type": "number" },
+        "isBlinded": { "type": "boolean" },
+        "isPinned": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "discussionId", "mode", "authorId", "anonymousName", "content", "createdAt"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "Discussion post thread comment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "postId": { "type": "string" },
+        "authorId": { "type": "string" },
+        "anonymousName": { "type": "string", "maxLength": 50 },
+        "avatar": { "type": "string", "maxLength": 10 },
+        "content": { "type": "string", "maxLength": 150 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "postId", "authorId", "anonymousName", "content", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/discussions/{discussionId}": {
+      "schema": "Discussion",
+      "description": "Collection of classroom discussions and active topic metadata"
+    },
+    "/posts/{postId}": {
+      "schema": "Post",
+      "description": "Collection of opinions, sticky notes, and structured arguments"
+    },
+    "/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Thread comments attached to debate posts"
+    }
+  }
+}

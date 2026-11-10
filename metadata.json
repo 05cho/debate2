@@ -1,0 +1,6 @@
+{
+  "name": "우리들의 생각 공장 - 무기명 학급 토론",
+  "description": "초·중·고등학교 수업을 위한 실시간 무기명 토론 웹앱. 찬반 토론, 자유 의견 모으기, 3단계 구조화 토론 및 교사 관리 모드를 지원합니다.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

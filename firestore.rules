@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Discussions: Read allowed to everyone in classroom, write restricted
+    match /discussions/{discussionId} {
+      allow read: if true;
+      allow write: if true; // In production, verify teacher token or admin claim
+    }
+
+    // Posts: Read allowed for all students in class
+    match /posts/{postId} {
+      allow read: if true;
+      
+      // Create: Valid length constraints (max 300 chars)
+      allow create: if request.resource.data.content is string 
+                    && request.resource.data.content.size() <= 300
+                    && request.resource.data.content.size() > 0;
+      
+      // Update: For likes toggling or teacher moderation
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+                      .hasAny(['likes', 'likedBy', 'commentsCount', 'isBlinded', 'isPinned']);
+      
+      // Delete: Moderation
+      allow delete: if true;
+    }
+
+    // Comments: Thread replies on posts
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if request.resource.data.content is string 
+                    && request.resource.data.content.size() <= 150
+                    && request.resource.data.content.size() > 0;
+      allow update, delete: if true;
+    }
+
+    // Default deny for other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
