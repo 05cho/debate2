@@ -28,7 +28,11 @@ export function getStoredSupabaseConfig(): SupabaseAppConfig | null {
     };
   }
 
-  return null;
+  // 3. Default School Supabase Project (fallback for Vercel / GitHub deployments)
+  return {
+    supabaseUrl: 'https://caxyodhhumfsmexuxnbe.supabase.co',
+    supabaseAnonKey: 'sb_publishable_pGVCUzt58UKrKP6LXX4zig_hRwyrTMx',
+  };
 }
 
 export function saveSupabaseConfig(config: SupabaseAppConfig): void {
