@@ -11,10 +11,12 @@ import {
   Send, 
   Sparkles,
   Palette,
-  ArrowUpDown
+  ArrowUpDown,
+  Maximize2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { CommentsDrawer } from './CommentsDrawer';
+import { PostZoomModal } from './PostZoomModal';
 
 interface DiscussionFreeNotesProps {
   discussion: Discussion;
@@ -23,6 +25,7 @@ interface DiscussionFreeNotesProps {
   onToggleLike: (postId: string) => void;
   onDeletePost: (postId: string) => void;
   onToggleBlind: (postId: string) => void;
+  showAllRealNames?: boolean;
 }
 
 const COLOR_OPTIONS: { id: NoteColor; label: string; bgClass: string; borderClass: string; textClass: string; hex: string }[] = [
@@ -41,6 +44,7 @@ export const DiscussionFreeNotes: React.FC<DiscussionFreeNotesProps> = ({
   onToggleLike,
   onDeletePost,
   onToggleBlind,
+  showAllRealNames = false,
 }) => {
   const { currentUser, isTeacher, theme } = useAuth();
 
@@ -52,18 +56,30 @@ export const DiscussionFreeNotes: React.FC<DiscussionFreeNotesProps> = ({
   const [filterColor, setFilterColor] = useState<NoteColor | 'all'>('all');
   const [revealedNames, setRevealedNames] = useState<{ [postId: string]: boolean }>({});
   const [activeCommentPost, setActiveCommentPost] = useState<Post | null>(null);
+  const [zoomPost, setZoomPost] = useState<Post | null>(null);
 
-  // Filter posts for free notes
-  const notePosts = posts.filter((p) => p.mode === 'free_notes');
+  const isPrivate = discussion.isBlindToStudents !== false;
+
+  const notePosts = posts.filter((p: Post) => p.mode === 'free_notes');
 
   const filteredPosts = notePosts
-    .filter((p) => filterColor === 'all' || p.color === filterColor)
-    .sort((a, b) => {
+    .filter((p: Post) => filterColor === 'all' || p.color === filterColor)
+    .sort((a: Post, b: Post) => {
       if (sortBy === 'likes') {
         return (b.likes || 0) - (a.likes || 0);
       }
       return b.createdAt - a.createdAt;
     });
+
+  const visiblePosts = filteredPosts.filter((p) => {
+    if (isTeacher) return true;
+    if (!isPrivate) return true;
+    const isMine = currentUser.isLoggedIn && (
+      p.authorId === currentUser.id ||
+      (currentUser.studentInfo && p.studentInfo?.studentNum === currentUser.studentInfo.studentNum)
+    );
+    return isMine;
+  });
 
   const toggleRevealName = (postId: string) => {
     setRevealedNames((prev) => ({
@@ -251,118 +267,167 @@ export const DiscussionFreeNotes: React.FC<DiscussionFreeNotesProps> = ({
       </div>
 
       {/* 3. Sticky Notes Board (Grid Layout with slight rotation aesthetics) */}
-      {filteredPosts.length === 0 ? (
-        <div className={`p-12 rounded-2xl border text-center opacity-60 ${
-          theme === 'chalkboard' ? 'border-emerald-800/40' : 'border-stone-200'
+      {visiblePosts.length === 0 ? (
+        <div className={`p-10 rounded-2xl border text-center ${
+          theme === 'chalkboard' ? 'border-emerald-800/40 bg-emerald-950/20' : 'border-stone-200 bg-stone-50'
         }`}>
-          <span className="text-3xl block mb-2">📋</span>
-          <p className="text-sm">아직 등록된 포스트잇이 없습니다. 자유롭게 첫 생각을 붙여보세요!</p>
+          {isPrivate && !isTeacher ? (
+            <div className="space-y-1.5 max-w-md mx-auto">
+              <span className="text-xl">🔒</span>
+              <p className="text-sm font-bold text-amber-600 dark:text-amber-400">
+                현재는 [비공개 모드]입니다.
+              </p>
+              <p className="text-xs opacity-75 leading-relaxed">
+                친구들의 생각에 영향받지 않고 나의 솔직한 생각을 자유롭게 포스트잇으로 붙여보세요! 내가 붙인 포스트잇은 여기에 바로 보이며, 다른 친구들의 포스트잇은 교사 발표 시간에 전체 공개됩니다.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm opacity-60">아직 등록된 포스트잇이 없습니다. 자유롭게 첫 생각을 붙여보세요!</p>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredPosts.map((post, idx) => {
+          {visiblePosts.map((post, idx) => {
             const isLiked = post.likedBy?.includes(currentUser.id);
+            const isMyPost = currentUser.isLoggedIn && (
+              post.authorId === currentUser.id ||
+              (currentUser.studentInfo && post.studentInfo?.studentNum === currentUser.studentInfo.studentNum)
+            );
             const colorMeta = COLOR_OPTIONS.find((c) => c.id === post.color) || COLOR_OPTIONS[0];
 
             // Gentle organic angle tilt pattern for sticky note feeling
             const rotations = ['rotate-0', 'rotate-1', '-rotate-1', 'rotate-0.5', '-rotate-0.5'];
+            const isNameRevealed = isTeacher && (showAllRealNames || revealedNames[post.id]);
             const rotClass = rotations[idx % rotations.length];
 
             return (
               <div
                 key={post.id}
-                className={`p-5 rounded-2xl border transition-all duration-200 shadow-md flex flex-col justify-between ${rotClass} hover:rotate-0 hover:scale-[1.02] ${colorMeta.bgClass} ${colorMeta.borderClass} ${colorMeta.textClass} ${
+                className={`p-5 sm:p-6 rounded-3xl border transition-all duration-200 shadow-md flex flex-col justify-between ${rotClass} hover:rotate-0 hover:scale-[1.02] ${colorMeta.bgClass} ${colorMeta.borderClass} ${colorMeta.textClass} ${
                   post.isBlinded ? 'opacity-40' : ''
-                }`}
+                } ${isPrivate && isMyPost ? 'ring-2 ring-amber-400 shadow-xl' : ''}`}
               >
                 <div>
                   {/* Sticky Note Pin / Top Header */}
-                  <div className="flex items-start justify-between gap-2 mb-3 pb-2 border-b border-black/10 dark:border-white/10">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">{post.avatar}</span>
+                  <div className="flex items-start justify-between gap-2 mb-3.5 pb-2.5 border-b border-black/10 dark:border-white/10">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-3xl select-none">{post.avatar}</span>
                       <div>
-                        <span className="font-bold text-xs sm:text-sm block">
-                          {post.anonymousName}
-                        </span>
-                        <span className="text-[10px] opacity-65 block">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-extrabold text-base block">
+                            {post.anonymousName}
+                          </span>
+                          {isPrivate && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/10 dark:bg-white/20">
+                              🔒 비공개
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs opacity-65 block mt-0.5">
                           {new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
                     </div>
 
-                    {/* Teacher tools */}
-                    {isTeacher && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => toggleRevealName(post.id)}
-                          title="실명 확인 (교사 전용)"
-                          className="p-1 rounded-md bg-purple-500/20 text-purple-700 dark:text-purple-300 text-xs font-bold flex items-center gap-0.5 cursor-pointer"
-                        >
-                          <Eye className="w-3 h-3" />
-                          <span className="text-[10px]">실명</span>
-                        </button>
-                        <button
-                          onClick={() => onToggleBlind(post.id)}
-                          title={post.isBlinded ? '블라인드 해제' : '블라인드'}
-                          className="p-1 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 cursor-pointer"
-                        >
-                          <EyeOff className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => onDeletePost(post.id)}
-                          title="삭제"
-                          className="p-1 rounded-md bg-rose-500/20 text-rose-700 dark:text-rose-300 cursor-pointer"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    )}
+                    {/* Actions: Zoom & Teacher tools */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setZoomPost(post)}
+                        title="클릭하여 대형 화면으로 확대"
+                        className="p-1.5 rounded-lg bg-black/10 hover:bg-black/20 text-xs font-bold flex items-center gap-1 cursor-pointer transition-all"
+                      >
+                        <Maximize2 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline text-[11px]">확대</span>
+                      </button>
+
+                      {isTeacher && (
+                        <>
+                          <button
+                            onClick={() => toggleRevealName(post.id)}
+                            title="실명 확인 (선생님 화면 전용)"
+                            className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-0.5 cursor-pointer transition-all ${
+                              isNameRevealed
+                                ? 'bg-purple-600 text-white shadow-xs'
+                                : 'bg-purple-500/20 text-purple-700 dark:text-purple-300'
+                            }`}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span className="text-[10px]">실명</span>
+                          </button>
+                          <button
+                            onClick={() => onToggleBlind(post.id)}
+                            title={post.isBlinded ? '블라인드 해제' : '블라인드'}
+                            className="p-1.5 rounded-lg bg-amber-500/20 text-amber-700 dark:text-amber-300 cursor-pointer"
+                          >
+                            <EyeOff className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => onDeletePost(post.id)}
+                            title="삭제"
+                            className="p-1.5 rounded-lg bg-rose-500/20 text-rose-700 dark:text-rose-300 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Teacher revealed real identity */}
-                  {isTeacher && revealedNames[post.id] && post.studentInfo && (
-                    <div className="mb-2 p-2 rounded-lg bg-purple-600/20 border border-purple-600/40 text-purple-900 dark:text-purple-100 text-xs font-semibold">
-                      🔒 {post.studentInfo.grade}학년 {post.studentInfo.classNum}반 {post.studentInfo.studentNum}번 {post.studentInfo.realName}
+                  {/* Teacher revealed real identity (선생님 화면에만 표시) */}
+                  {isTeacher && isNameRevealed && post.studentInfo && (
+                    <div className="mb-2.5 p-2 rounded-xl bg-purple-600/20 border border-purple-600/40 text-purple-900 dark:text-purple-100 text-xs sm:text-sm font-bold flex items-center justify-between">
+                      <span>🔒 {post.studentInfo.grade}학년 {post.studentInfo.classNum}반 {post.studentInfo.studentNum}번 {post.studentInfo.realName}</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-700 text-white font-semibold">교사 전용</span>
                     </div>
                   )}
 
-                  {/* Note Content */}
-                  <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap break-words min-h-[60px] mb-4">
-                    {post.isBlinded ? (
-                      <span className="italic opacity-60">교사에 의해 블라인드 처리된 메모입니다.</span>
-                    ) : (
-                      post.content
-                    )}
-                  </p>
+                  {/* Note Content: Large font size for classroom legibility */}
+                  <div
+                    onClick={() => setZoomPost(post)}
+                    className="cursor-pointer group py-1"
+                    title="클릭하여 대형 화면으로 확대"
+                  >
+                    <p className="text-base sm:text-lg font-medium leading-relaxed whitespace-pre-wrap break-words min-h-[60px] mb-4 group-hover:opacity-80 transition-opacity">
+                      {post.isBlinded ? (
+                        <span className="italic opacity-60">교사에 의해 블라인드 처리된 메모입니다.</span>
+                      ) : (
+                        post.content
+                      )}
+                    </p>
+                  </div>
                 </div>
 
                 {/* Footer Interactions */}
-                <div className="flex items-center justify-between pt-2 border-t border-black/10 dark:border-white/10 text-xs">
+                <div className="flex items-center justify-between pt-2.5 border-t border-black/10 dark:border-white/10 text-xs sm:text-sm">
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => onToggleLike(post.id)}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
                         isLiked
-                          ? 'bg-rose-500 text-white font-bold shadow-xs'
+                          ? 'bg-rose-500 text-white font-bold shadow-xs scale-105'
                           : 'bg-black/5 dark:bg-white/10 hover:bg-black/10'
                       }`}
                     >
-                      <Heart className={`w-3.5 h-3.5 ${isLiked ? 'fill-white' : ''}`} />
+                      <Heart className={`w-4 h-4 ${isLiked ? 'fill-white' : ''}`} />
                       <span>{post.likes || 0}</span>
                     </button>
 
                     <button
                       onClick={() => setActiveCommentPost(post)}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 transition-all cursor-pointer"
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 transition-all cursor-pointer"
                     >
-                      <MessageSquare className="w-3.5 h-3.5" />
+                      <MessageSquare className="w-4 h-4" />
                       <span>{post.commentsCount || 0}</span>
                     </button>
                   </div>
 
-                  <span className="text-[10px] opacity-60">
-                    포스트잇
-                  </span>
+                  <button
+                    onClick={() => setZoomPost(post)}
+                    className="text-xs opacity-60 hover:opacity-100 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    <span>확대</span>
+                  </button>
                 </div>
 
               </div>
@@ -378,6 +443,17 @@ export const DiscussionFreeNotes: React.FC<DiscussionFreeNotesProps> = ({
           onClose={() => setActiveCommentPost(null)}
         />
       )}
+
+      {/* Presentation Mode Full Zoom Modal */}
+      <PostZoomModal
+        post={zoomPost}
+        allPosts={visiblePosts}
+        isOpen={!!zoomPost}
+        onClose={() => setZoomPost(null)}
+        onSelectPost={(p) => setZoomPost(p)}
+        onToggleLike={onToggleLike}
+        onOpenComments={(p) => setActiveCommentPost(p)}
+      />
 
     </div>
   );

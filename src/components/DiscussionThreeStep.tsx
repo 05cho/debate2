@@ -14,10 +14,12 @@ import {
   ChevronRight,
   Shield,
   Layers,
-  Quote
+  Quote,
+  Maximize2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { CommentsDrawer } from './CommentsDrawer';
+import { PostZoomModal } from './PostZoomModal';
 
 interface DiscussionThreeStepProps {
   discussion: Discussion;
@@ -27,6 +29,7 @@ interface DiscussionThreeStepProps {
   onDeletePost: (postId: string) => void;
   onToggleBlind: (postId: string) => void;
   onAdvanceStage: (stage: ThreeStepStage) => void;
+  showAllRealNames?: boolean;
 }
 
 const STAGES: { stage: ThreeStepStage; title: string; subtitle: string; icon: string; description: string }[] = [
@@ -61,6 +64,7 @@ export const DiscussionThreeStep: React.FC<DiscussionThreeStepProps> = ({
   onDeletePost,
   onToggleBlind,
   onAdvanceStage,
+  showAllRealNames = false,
 }) => {
   const { currentUser, isTeacher, theme } = useAuth();
 
@@ -73,12 +77,25 @@ export const DiscussionThreeStep: React.FC<DiscussionThreeStepProps> = ({
   const [selectedQuotePost, setSelectedQuotePost] = useState<Post | null>(null);
   const [revealedNames, setRevealedNames] = useState<{ [postId: string]: boolean }>({});
   const [activeCommentPost, setActiveCommentPost] = useState<Post | null>(null);
+  const [zoomPost, setZoomPost] = useState<Post | null>(null);
 
   // Filter posts belonging to three_step
   const threeStepPosts = posts.filter((p) => p.mode === 'three_step');
 
+  const isPrivate = discussion.isBlindToStudents !== false;
+
   // Stage filtered posts
   const postsInActiveTab = threeStepPosts.filter((p) => (p.stage || 1) === activeTabStage);
+
+  const visiblePostsInActiveTab = postsInActiveTab.filter((p) => {
+    if (isTeacher) return true;
+    if (!isPrivate) return true;
+    const isMine = currentUser.isLoggedIn && (
+      p.authorId === currentUser.id ||
+      (currentUser.studentInfo && p.studentInfo?.studentNum === currentUser.studentInfo.studentNum)
+    );
+    return isMine;
+  });
 
   const toggleRevealName = (postId: string) => {
     setRevealedNames((prev) => ({
@@ -348,144 +365,206 @@ export const DiscussionThreeStep: React.FC<DiscussionThreeStepProps> = ({
           </div>
 
           <span className="text-xs opacity-60">
-            현재 보기: {activeTabStage}단계 ({postsInActiveTab.length}개)
+            {isPrivate && !isTeacher
+              ? `내 발언 (${visiblePostsInActiveTab.length}개)`
+              : `현재 보기: ${activeTabStage}단계 (${postsInActiveTab.length}개)`}
           </span>
         </div>
 
         {/* Post cards */}
-        {postsInActiveTab.length === 0 ? (
-          <div className={`p-10 rounded-2xl border text-center opacity-60 ${
-            theme === 'chalkboard' ? 'border-emerald-800/40' : 'border-stone-200'
+        {visiblePostsInActiveTab.length === 0 ? (
+          <div className={`p-8 rounded-2xl border text-center ${
+            theme === 'chalkboard' ? 'border-emerald-800/40 bg-emerald-950/20' : 'border-stone-200 bg-stone-50'
           }`}>
-            <p className="text-sm">아직 {activeTabStage}단계에 등록된 발언이 없습니다.</p>
+            {isPrivate && !isTeacher ? (
+              <div className="space-y-1.5 max-w-md mx-auto">
+                <span className="text-xl">🔒</span>
+                <p className="text-sm font-bold text-amber-600 dark:text-amber-400">
+                  현재는 [비공개 모드]입니다.
+                </p>
+                <p className="text-xs opacity-75 leading-relaxed">
+                  친구들의 생각에 영향받지 않고 {activeTabStage}단계 발언을 자유롭게 작성해보세요! 내가 제출한 발언은 여기에 바로 나타나며, 다른 친구들의 발언은 교사 발표 시간에 전체 공개됩니다.
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm opacity-60">아직 {activeTabStage}단계에 등록된 발언이 없습니다.</p>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {postsInActiveTab.map((post) => {
+            {visiblePostsInActiveTab.map((post) => {
               const isLiked = post.likedBy?.includes(currentUser.id);
+              const isMyPost = currentUser.isLoggedIn && (
+                post.authorId === currentUser.id ||
+                (currentUser.studentInfo && post.studentInfo?.studentNum === currentUser.studentInfo.studentNum)
+              );
+              const isNameRevealed = isTeacher && (showAllRealNames || revealedNames[post.id]);
 
               return (
                 <div
                   key={post.id}
-                  className={`p-5 rounded-2xl border transition-all duration-200 shadow-xs flex flex-col justify-between ${
+                  className={`p-5 sm:p-6 rounded-3xl border transition-all duration-200 shadow-sm flex flex-col justify-between ${
                     post.isBlinded ? 'opacity-40 bg-stone-500/10' : ''
                   } ${
+                    isPrivate && isMyPost ? 'ring-2 ring-amber-400/80 bg-amber-500/5' : ''
+                  } ${
                     theme === 'chalkboard'
-                      ? 'bg-[#182a24] border-emerald-800/60 text-emerald-50 hover:border-emerald-700'
-                      : 'bg-white border-stone-200 text-stone-800 hover:border-stone-300'
+                      ? 'bg-[#182a24] border-emerald-800/60 text-emerald-50 hover:border-emerald-600'
+                      : 'bg-white border-stone-200 text-stone-900 hover:border-stone-300'
                   }`}
                 >
                   <div>
                     {/* Header */}
-                    <div className="flex items-start justify-between gap-2 mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">{post.avatar}</span>
+                    <div className="flex items-start justify-between gap-2 mb-3.5">
+                      <div className="flex items-center gap-3">
+                        <span className="text-3xl sm:text-4xl select-none">{post.avatar}</span>
                         <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-xs sm:text-sm">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-extrabold text-base sm:text-lg">
                               {post.anonymousName}
                             </span>
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 font-bold border border-emerald-500/30">
-                              {post.stage}단계
+                            <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-extrabold border border-emerald-500/30">
+                              {post.stage}단계 발언
                             </span>
+                            {isPrivate && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                                🔒 비공개 제출
+                              </span>
+                            )}
                           </div>
-                          <span className="text-[10px] opacity-60 block">
+                          <span className="text-xs opacity-60 block mt-0.5">
                             {new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
                       </div>
 
-                      {/* Teacher moderation tools */}
-                      {isTeacher && (
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => toggleRevealName(post.id)}
-                            title="실명 확인 (교사 전용)"
-                            className="p-1 rounded-md text-purple-600 dark:text-purple-300 hover:bg-purple-500/20 text-xs font-semibold flex items-center gap-0.5 cursor-pointer"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span className="text-[10px]">실명</span>
-                          </button>
-                          <button
-                            onClick={() => onToggleBlind(post.id)}
-                            title="블라인드"
-                            className="p-1 rounded-md text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 cursor-pointer"
-                          >
-                            <EyeOff className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => onDeletePost(post.id)}
-                            title="삭제"
-                            className="p-1 rounded-md text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
+                      {/* Top actions: Zoom & Teacher moderation tools */}
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setZoomPost(post)}
+                          title="클릭하여 대형 화면으로 확대"
+                          className="px-2.5 py-1.5 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs hover:scale-105"
+                        >
+                          <Maximize2 className="w-3.5 h-3.5 text-emerald-500" />
+                          <span className="hidden sm:inline">확대</span>
+                        </button>
+
+                        {isTeacher && (
+                          <>
+                            <button
+                              onClick={() => toggleRevealName(post.id)}
+                              title="실명 확인 (선생님 화면 전용)"
+                              className={`p-1.5 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-all ${
+                                isNameRevealed
+                                  ? 'bg-purple-600 text-white shadow-xs'
+                                  : 'text-purple-600 dark:text-purple-300 hover:bg-purple-500/20'
+                              }`}
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline text-[11px]">실명</span>
+                            </button>
+                            <button
+                              onClick={() => onToggleBlind(post.id)}
+                              title="블라인드"
+                              className="p-1.5 rounded-xl text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 cursor-pointer"
+                            >
+                              <EyeOff className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => onDeletePost(post.id)}
+                              title="삭제"
+                              className="p-1.5 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Teacher revealed real identity */}
-                    {isTeacher && revealedNames[post.id] && post.studentInfo && (
-                      <div className="mb-2 p-2 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-700 dark:text-purple-300 text-xs font-semibold">
-                        🔒 {post.studentInfo.grade}학년 {post.studentInfo.classNum}반 {post.studentInfo.studentNum}번 {post.studentInfo.realName}
+                    {/* Teacher revealed real identity (선생님 화면에만 표시) */}
+                    {isTeacher && isNameRevealed && post.studentInfo && (
+                      <div className="mb-3 p-2.5 rounded-xl bg-purple-500/20 border border-purple-500/40 text-purple-800 dark:text-purple-200 text-xs sm:text-sm font-semibold flex items-center justify-between">
+                        <span>
+                          🔒 교사 확인: <strong>{post.studentInfo.grade}학년 {post.studentInfo.classNum}반 {post.studentInfo.studentNum}번 {post.studentInfo.realName}</strong>
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-600 text-white font-bold">
+                          교사 전용
+                        </span>
                       </div>
                     )}
 
                     {/* Reply to summary badge if any */}
                     {post.replyToSummary && (
-                      <div className="mb-2.5 p-2 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-xs text-stone-600 dark:text-stone-300 flex items-center gap-1.5">
-                        <Quote className="w-3.5 h-3.5 shrink-0 text-emerald-500" />
+                      <div className="mb-3 p-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-xs sm:text-sm text-stone-600 dark:text-stone-300 flex items-center gap-1.5">
+                        <Quote className="w-4 h-4 shrink-0 text-emerald-500" />
                         <span className="truncate italic">{post.replyToSummary}</span>
                       </div>
                     )}
 
-                    {/* Content */}
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap break-words mb-4">
-                      {post.isBlinded ? (
-                        <span className="italic opacity-60">교사에 의해 블라인드 처리된 발언입니다.</span>
-                      ) : (
-                        post.content
-                      )}
-                    </p>
+                    {/* Content: Large font size for classroom legibility */}
+                    <div
+                      onClick={() => setZoomPost(post)}
+                      className="cursor-pointer group py-1"
+                      title="클릭하여 대형 화면으로 확대"
+                    >
+                      <p className="text-base sm:text-lg md:text-xl font-medium leading-relaxed whitespace-pre-wrap break-words mb-4 group-hover:text-emerald-500 transition-colors">
+                        {post.isBlinded ? (
+                          <span className="italic opacity-60">교사에 의해 블라인드 처리된 발언입니다.</span>
+                        ) : (
+                          post.content
+                        )}
+                      </p>
+                    </div>
                   </div>
 
                   {/* Footer actions */}
-                  <div className="flex items-center justify-between pt-3 border-t border-black/5 dark:border-white/10 text-xs">
+                  <div className="flex items-center justify-between pt-3.5 border-t border-black/5 dark:border-white/10 text-xs sm:text-sm">
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => onToggleLike(post.id)}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
                           isLiked
-                            ? 'text-rose-500 bg-rose-500/10 font-bold'
+                            ? 'text-rose-500 bg-rose-500/10 font-bold scale-105'
                             : 'opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5'
                         }`}
                       >
-                        <Heart className={`w-3.5 h-3.5 ${isLiked ? 'fill-rose-500' : ''}`} />
+                        <Heart className={`w-4 h-4 ${isLiked ? 'fill-rose-500' : ''}`} />
                         <span>공감 {post.likes || 0}</span>
                       </button>
 
                       <button
                         onClick={() => setActiveCommentPost(post)}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5 transition-all cursor-pointer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5 transition-all cursor-pointer"
                       >
-                        <MessageSquare className="w-3.5 h-3.5" />
+                        <MessageSquare className="w-4 h-4" />
                         <span>댓글 {post.commentsCount || 0}</span>
                       </button>
                     </div>
 
-                    {/* Quote & Reply trigger */}
-                    {currentStage > (post.stage || 1) && discussion.allowSubmissions && (
+                    <div className="flex items-center gap-2">
+                      {/* Quote & Reply trigger */}
+                      {currentStage > (post.stage || 1) && discussion.allowSubmissions && (
+                        <button
+                          onClick={() => {
+                            setSelectedQuotePost(post);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                        >
+                          <Quote className="w-3.5 h-3.5" />
+                          <span>인용 발언</span>
+                        </button>
+                      )}
+
                       <button
-                        onClick={() => {
-                          setSelectedQuotePost(post);
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer"
+                        onClick={() => setZoomPost(post)}
+                        className="text-xs opacity-60 hover:opacity-100 hover:text-emerald-500 flex items-center gap-1 cursor-pointer transition-colors"
                       >
-                        <Quote className="w-3 h-3" />
-                        <span>인용 발언</span>
+                        <Maximize2 className="w-3.5 h-3.5" />
+                        <span>확대</span>
                       </button>
-                    )}
+                    </div>
                   </div>
 
                 </div>
@@ -502,6 +581,17 @@ export const DiscussionThreeStep: React.FC<DiscussionThreeStepProps> = ({
           onClose={() => setActiveCommentPost(null)}
         />
       )}
+
+      {/* Presentation Mode Full Zoom Modal */}
+      <PostZoomModal
+        post={zoomPost}
+        allPosts={visiblePostsInActiveTab}
+        isOpen={!!zoomPost}
+        onClose={() => setZoomPost(null)}
+        onSelectPost={(p) => setZoomPost(p)}
+        onToggleLike={onToggleLike}
+        onOpenComments={(p) => setActiveCommentPost(p)}
+      />
 
     </div>
   );

@@ -15,43 +15,62 @@ import {
 } from 'firebase/firestore';
 import { db, connectionStatus as firebaseConnectionStatus } from './firebase';
 import { supabase, connectionStatus as supabaseConnectionStatus } from './supabase';
-import type { Discussion, Post, Comment, DiscussionMode, ThreeStepStage } from '../types';
+import type { Discussion, Post, Comment, DiscussionMode, ThreeStepStage, StudentInfo, StudentPresence } from '../types';
+import { CLASS_ROSTER } from '../data/classRoster';
 
 const STORAGE_KEY_DISCUSSION = 'school_debate_current_discussion';
+const STORAGE_KEY_DISCUSSIONS_LIST = 'school_debate_discussions_list';
+const STORAGE_KEY_ACTIVE_TOPIC_ID = 'school_debate_active_topic_id';
 const STORAGE_KEY_POSTS = 'school_debate_posts';
 const STORAGE_KEY_COMMENTS = 'school_debate_comments';
+const STORAGE_KEY_PRESENCES = 'school_debate_student_presences';
 
-// Default initial debate topic for classroom
-const DEFAULT_DISCUSSION: Discussion = {
-  id: 'current-topic',
-  title: '초·중·고등학교 내 스마트폰 자율 사용을 전면 허용해야 하는가?',
-  description: '수업 시간 및 쉬는 시간 학생들의 스마트폰 소지와 자율적 디지털 학습 도구 활용에 대한 여러분의 진솔한 생각과 구체적인 근거를 나눠주세요.',
-  mode: 'pro_con',
-  currentStage: 1,
-  isActive: true,
-  allowSubmissions: true,
-  createdAt: Date.now() - 3600000,
-  updatedAt: Date.now(),
-};
+// Default initial debate topics for classroom
+const DEFAULT_DISCUSSIONS: Discussion[] = [
+  {
+    id: 'current-topic',
+    title: '초·중·고등학교 내 스마트폰 자율 사용을 전면 허용해야 하는가?',
+    description: '수업 시간 및 쉬는 시간 학생들의 스마트폰 소지와 자율적 디지털 학습 도구 활용에 대한 여러분의 진솔한 생각과 구체적인 근거를 나눠주세요.',
+    mode: 'pro_con',
+    currentStage: 1,
+    isActive: true,
+    allowSubmissions: true,
+    isBlindToStudents: true, // 기본 비공개 모드 (교사가 전체 공개 버튼을 누르기 전까지 학생 간 비공개)
+    createdAt: Date.now() - 3600000,
+    updatedAt: Date.now(),
+  },
+  {
+    id: 'topic-ai-homework',
+    title: '생성형 AI(ChatGPT 등)를 학교 과제 및 수업 활동에 자유롭게 활용해야 하는가?',
+    description: '인공지능 도구를 활용한 창의적 문제 해결과 학습 보조 vs 스스로 생각하는 사고력 저하 및 표절 우려에 대해 자유롭게 의견을 나눠봅시다.',
+    mode: 'free_notes',
+    currentStage: 1,
+    isActive: false,
+    allowSubmissions: true,
+    isBlindToStudents: true,
+    createdAt: Date.now() - 7200000,
+    updatedAt: Date.now() - 7200000,
+  },
+];
 
 const DEFAULT_POSTS: Post[] = [
   {
     id: 'sample-p1',
     discussionId: 'current-topic',
     mode: 'pro_con',
-    authorId: 'student-demo-1',
+    authorId: 'std_1',
     anonymousName: '지혜로운 사자',
     avatar: '🦁',
     content: '정보 검색과 디지털 사전, 시간 관리 앱 등 스스로 조절하며 올바른 디지털 시민 의식을 기를 수 있는 좋은 기회입니다.',
     stance: 'agree',
     likes: 5,
-    likedBy: ['demo-like-1', 'demo-like-2'],
+    likedBy: ['std_2', 'std_3'],
     commentsCount: 2,
     studentInfo: {
       grade: 2,
       classNum: 3,
-      studentNum: 14,
-      realName: '김민수',
+      studentNum: 1,
+      realName: '안은비',
     },
     createdAt: Date.now() - 2400000,
   },
@@ -59,19 +78,19 @@ const DEFAULT_POSTS: Post[] = [
     id: 'sample-p2',
     discussionId: 'current-topic',
     mode: 'pro_con',
-    authorId: 'student-demo-2',
+    authorId: 'std_2',
     anonymousName: '당당한 독수리',
     avatar: '🦅',
     content: '수업 집중도가 떨어지고 SNS나 게임의 유혹을 참기 어려워 학습권 침해 및 친구 간 대면 소통 단절 문제가 발생할 수 있습니다.',
     stance: 'disagree',
     likes: 8,
-    likedBy: ['demo-like-3', 'demo-like-4', 'demo-like-5'],
+    likedBy: ['std_4', 'std_5'],
     commentsCount: 1,
     studentInfo: {
       grade: 2,
       classNum: 3,
-      studentNum: 7,
-      realName: '이서연',
+      studentNum: 2,
+      realName: '오세아',
     },
     createdAt: Date.now() - 1800000,
   },
@@ -79,50 +98,50 @@ const DEFAULT_POSTS: Post[] = [
     id: 'sample-p3',
     discussionId: 'current-topic',
     mode: 'pro_con',
-    authorId: 'student-demo-3',
+    authorId: 'std_3',
     anonymousName: '다정한 돌고래',
     avatar: '🐬',
     content: '무조건적인 전면 허용이나 일괄 수거보다는, 수업 시간에는 교사 재량으로 보관하고 쉬는 시간이나 점심 시간에만 자율적으로 허용하는 절충안이 합리적입니다.',
     stance: 'neutral',
     likes: 12,
-    likedBy: ['demo-like-1', 'demo-like-6'],
+    likedBy: ['std_1', 'std_6'],
     commentsCount: 0,
     studentInfo: {
       grade: 2,
       classNum: 3,
-      studentNum: 21,
-      realName: '박준혁',
+      studentNum: 3,
+      realName: '유예솔',
     },
     createdAt: Date.now() - 900000,
   },
   {
     id: 'sample-f1',
-    discussionId: 'current-topic',
+    discussionId: 'topic-ai-homework',
     mode: 'free_notes',
-    authorId: 'student-demo-4',
+    authorId: 'std_4',
     anonymousName: '용감한 호랑이',
     avatar: '🐯',
-    content: '스마트폰 카메라로 칠판 필기를 기록하거나 과제 제출할 때 훨씬 편리해요! 규칙을 정해서 쓰면 충분합니다.',
+    content: '어려운 개념을 질문하면 친절한 맞춤형 과외 선생님처럼 설명해 줘서 자기주도학습에 큰 도움이 돼요!',
     color: 'yellow',
     likes: 6,
     likedBy: [],
-    commentsCount: 1,
+    commentsCount: 0,
     studentInfo: {
       grade: 2,
       classNum: 3,
-      studentNum: 3,
-      realName: '최유진',
+      studentNum: 4,
+      realName: '이다영',
     },
     createdAt: Date.now() - 1500000,
   },
   {
     id: 'sample-f2',
-    discussionId: 'current-topic',
+    discussionId: 'topic-ai-homework',
     mode: 'free_notes',
-    authorId: 'student-demo-5',
+    authorId: 'std_5',
     anonymousName: '차분한 부엉이',
     avatar: '🦉',
-    content: '쉬는 시간마다 다들 화면만 쳐다보고 대화가 사라질까 봐 걱정돼요. 친구들과 운동장에서 놀 시간이 필요해요.',
+    content: '질문 없이 답만 그대로 복사해 제출하면 스스로 글을 쓰는 능력이나 비판적 사고력이 줄어들 수 있어요.',
     color: 'mint',
     likes: 9,
     likedBy: [],
@@ -130,50 +149,10 @@ const DEFAULT_POSTS: Post[] = [
     studentInfo: {
       grade: 2,
       classNum: 3,
-      studentNum: 18,
-      realName: '정하늘',
+      studentNum: 5,
+      realName: '이하윤',
     },
     createdAt: Date.now() - 1200000,
-  },
-  {
-    id: 'sample-t1',
-    discussionId: 'current-topic',
-    mode: 'three_step',
-    stage: 1,
-    authorId: 'student-demo-6',
-    anonymousName: '빛나는 별빛',
-    avatar: '✨',
-    content: '[입론 - 찬성] 21세기 디지털 역량 교육을 위해 기기를 제한하기보다 책임감 있는 사용 습관을 학교에서 지도해야 합니다.',
-    likes: 4,
-    likedBy: [],
-    commentsCount: 0,
-    studentInfo: {
-      grade: 2,
-      classNum: 3,
-      studentNum: 29,
-      realName: '윤도현',
-    },
-    createdAt: Date.now() - 800000,
-  },
-  {
-    id: 'sample-t2',
-    discussionId: 'current-topic',
-    mode: 'three_step',
-    stage: 1,
-    authorId: 'student-demo-7',
-    anonymousName: '정의로운 코알라',
-    avatar: '🐨',
-    content: '[입론 - 반대] 청소년기 뇌 발달과 집중력 유지를 위해 수업 환경만큼은 디지털 디톡스 공간으로 보호되어야 합니다.',
-    likes: 5,
-    likedBy: [],
-    commentsCount: 0,
-    studentInfo: {
-      grade: 2,
-      classNum: 3,
-      studentNum: 11,
-      realName: '강예은',
-    },
-    createdAt: Date.now() - 600000,
   },
 ];
 
@@ -181,7 +160,7 @@ const DEFAULT_COMMENTS: Comment[] = [
   {
     id: 'sample-c1',
     postId: 'sample-p1',
-    authorId: 'student-demo-2',
+    authorId: 'std_2',
     anonymousName: '당당한 독수리',
     avatar: '🦅',
     content: '자율적인 조절이 아직 어려운 학생들은 수업 중 알림에 쉽게 주의가 흐트러질 수 있지 않을까요?',
@@ -189,14 +168,14 @@ const DEFAULT_COMMENTS: Comment[] = [
     studentInfo: {
       grade: 2,
       classNum: 3,
-      studentNum: 7,
-      realName: '이서연',
+      studentNum: 2,
+      realName: '오세아',
     },
   },
   {
     id: 'sample-c2',
     postId: 'sample-p1',
-    authorId: 'student-demo-1',
+    authorId: 'std_1',
     anonymousName: '지혜로운 사자',
     avatar: '🦁',
     content: '방해 금지 모드나 비행기 탑승 모드 규정을 학급 자치회에서 만들면 해결할 수 있다고 생각해요!',
@@ -204,16 +183,32 @@ const DEFAULT_COMMENTS: Comment[] = [
     studentInfo: {
       grade: 2,
       classNum: 3,
-      studentNum: 14,
-      realName: '김민수',
+      studentNum: 1,
+      realName: '안은비',
     },
   },
 ];
 
-// In-memory active subscriber sets for the current document context
+// Initial classroom presence map for the 25 students
+function getInitialPresences(): StudentPresence[] {
+  return CLASS_ROSTER.map((student) => ({
+    studentNum: student.studentNum,
+    realName: student.realName,
+    grade: 2,
+    classNum: 3,
+    anonymousName: '',
+    avatar: '🌱',
+    isOnline: false,
+    lastLoginAt: 0,
+  }));
+}
+
+// In-memory active subscriber sets
 const localDiscussionSubscribers = new Set<(discussion: Discussion) => void>();
+const localDiscussionsListSubscribers = new Set<(list: Discussion[], activeId: string) => void>();
 const localPostsSubscribers = new Set<(posts: Post[]) => void>();
 const localCommentsSubscribers = new Map<string, Set<(comments: Comment[]) => void>>();
+const localPresencesSubscribers = new Set<(presences: StudentPresence[]) => void>();
 
 // Broadcast channel for instantaneous cross-tab live synchronization
 let broadcastChannel: BroadcastChannel | null = null;
@@ -224,6 +219,9 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       if (event.data?.type === 'DISCUSSION_UPDATED') {
         const disc = event.data.data;
         localDiscussionSubscribers.forEach((cb) => cb(disc));
+      } else if (event.data?.type === 'DISCUSSIONS_LIST_UPDATED') {
+        const { list, activeId } = event.data.data;
+        localDiscussionsListSubscribers.forEach((cb) => cb(list, activeId));
       } else if (event.data?.type === 'POSTS_UPDATED') {
         const posts = event.data.data;
         localPostsSubscribers.forEach((cb) => cb(posts));
@@ -233,6 +231,9 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
           const filtered = comments.filter((c) => c.postId === postId);
           set.forEach((cb) => cb(filtered));
         });
+      } else if (event.data?.type === 'PRESENCES_UPDATED') {
+        const presences = event.data.data as StudentPresence[];
+        localPresencesSubscribers.forEach((cb) => cb(presences));
       }
     };
   } catch (e) {
@@ -240,26 +241,88 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
   }
 }
 
-// Local storage helpers
-function getLocalDiscussion(): Discussion {
-  const data = localStorage.getItem(STORAGE_KEY_DISCUSSION);
+// Discussions List Helpers
+export function getDiscussionsList(): Discussion[] {
+  const data = localStorage.getItem(STORAGE_KEY_DISCUSSIONS_LIST);
   if (!data) {
-    localStorage.setItem(STORAGE_KEY_DISCUSSION, JSON.stringify(DEFAULT_DISCUSSION));
-    return DEFAULT_DISCUSSION;
+    localStorage.setItem(STORAGE_KEY_DISCUSSIONS_LIST, JSON.stringify(DEFAULT_DISCUSSIONS));
+    return DEFAULT_DISCUSSIONS;
   }
   try {
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_DISCUSSIONS;
   } catch {
-    return DEFAULT_DISCUSSION;
+    return DEFAULT_DISCUSSIONS;
   }
+}
+
+export function setDiscussionsList(list: Discussion[]): void {
+  localStorage.setItem(STORAGE_KEY_DISCUSSIONS_LIST, JSON.stringify(list));
+  const activeId = getActiveTopicId();
+  localDiscussionsListSubscribers.forEach((cb) => cb(list, activeId));
+  broadcastChannel?.postMessage({
+    type: 'DISCUSSIONS_LIST_UPDATED',
+    data: { list, activeId },
+  });
+}
+
+export function getActiveTopicId(): string {
+  return localStorage.getItem(STORAGE_KEY_ACTIVE_TOPIC_ID) || 'current-topic';
+}
+
+export function setActiveTopicId(topicId: string): void {
+  localStorage.setItem(STORAGE_KEY_ACTIVE_TOPIC_ID, topicId);
+  const list = getDiscussionsList();
+  const current = list.find((d) => d.id === topicId) || list[0] || DEFAULT_DISCUSSIONS[0];
+  
+  // Also sync current discussion
+  localStorage.setItem(STORAGE_KEY_DISCUSSION, JSON.stringify(current));
+  localDiscussionSubscribers.forEach((cb) => cb(current));
+  localDiscussionsListSubscribers.forEach((cb) => cb(list, topicId));
+  
+  broadcastChannel?.postMessage({
+    type: 'DISCUSSIONS_LIST_UPDATED',
+    data: { list, activeId: topicId },
+  });
+  broadcastChannel?.postMessage({
+    type: 'DISCUSSION_UPDATED',
+    data: current,
+  });
+
+  // Re-broadcast posts for this newly active topic
+  const posts = getLocalPosts();
+  localPostsSubscribers.forEach((cb) => cb(posts));
+}
+
+// Current Discussion helper
+function getLocalDiscussion(): Discussion {
+  const list = getDiscussionsList();
+  const activeId = getActiveTopicId();
+  const found = list.find((d) => d.id === activeId);
+  if (found) return found;
+
+  const data = localStorage.getItem(STORAGE_KEY_DISCUSSION);
+  if (data) {
+    try {
+      return JSON.parse(data);
+    } catch {}
+  }
+  return DEFAULT_DISCUSSIONS[0];
 }
 
 function setLocalDiscussion(disc: Discussion): void {
   localStorage.setItem(STORAGE_KEY_DISCUSSION, JSON.stringify(disc));
+  // Also update inside discussions list
+  const list = getDiscussionsList();
+  const exists = list.some((d) => d.id === disc.id);
+  const updatedList = exists ? list.map((d) => (d.id === disc.id ? disc : d)) : [disc, ...list];
+  setDiscussionsList(updatedList);
+
   localDiscussionSubscribers.forEach((cb) => cb(disc));
   broadcastChannel?.postMessage({ type: 'DISCUSSION_UPDATED', data: disc });
 }
 
+// Posts Helpers
 function getLocalPosts(): Post[] {
   const data = localStorage.getItem(STORAGE_KEY_POSTS);
   if (!data) {
@@ -279,6 +342,7 @@ function setLocalPosts(posts: Post[]): void {
   broadcastChannel?.postMessage({ type: 'POSTS_UPDATED', data: posts });
 }
 
+// Comments Helpers
 function getLocalComments(): Comment[] {
   const data = localStorage.getItem(STORAGE_KEY_COMMENTS);
   if (!data) {
@@ -301,7 +365,84 @@ function setLocalComments(comments: Comment[]): void {
   broadcastChannel?.postMessage({ type: 'COMMENTS_UPDATED', data: comments });
 }
 
-// Supabase row adapters
+// Presences (Student attendance & login list) Helpers
+export function getStudentPresences(): StudentPresence[] {
+  const data = localStorage.getItem(STORAGE_KEY_PRESENCES);
+  if (!data) {
+    const initial = getInitialPresences();
+    localStorage.setItem(STORAGE_KEY_PRESENCES, JSON.stringify(initial));
+    return initial;
+  }
+  try {
+    const parsed = JSON.parse(data) as StudentPresence[];
+    // Ensure all 25 students exist
+    const map = new Map(parsed.map((p) => [p.studentNum, p]));
+    return CLASS_ROSTER.map((student) => {
+      const existing = map.get(student.studentNum);
+      if (existing) return existing;
+      return {
+        studentNum: student.studentNum,
+        realName: student.realName,
+        grade: 2,
+        classNum: 3,
+        anonymousName: '',
+        avatar: '🌱',
+        isOnline: false,
+        lastLoginAt: 0,
+      };
+    });
+  } catch {
+    return getInitialPresences();
+  }
+}
+
+export function setStudentPresences(presences: StudentPresence[]): void {
+  localStorage.setItem(STORAGE_KEY_PRESENCES, JSON.stringify(presences));
+  localPresencesSubscribers.forEach((cb) => cb(presences));
+  broadcastChannel?.postMessage({ type: 'PRESENCES_UPDATED', data: presences });
+}
+
+export function recordStudentPresence(
+  student: StudentInfo,
+  anonymousName: string,
+  avatar: string
+): void {
+  const current = getStudentPresences();
+  const updated = current.map((p) => {
+    if (p.studentNum === Number(student.studentNum)) {
+      return {
+        ...p,
+        realName: student.realName,
+        grade: student.grade,
+        classNum: student.classNum,
+        anonymousName,
+        avatar,
+        isOnline: true,
+        lastLoginAt: Date.now(),
+      };
+    }
+    return p;
+  });
+
+  setStudentPresences(updated);
+}
+
+export function resetStudentPresences(): void {
+  const resetList = getInitialPresences();
+  setStudentPresences(resetList);
+}
+
+export function subscribeStudentPresences(
+  callback: (presences: StudentPresence[]) => void
+): () => void {
+  callback(getStudentPresences());
+  localPresencesSubscribers.add(callback);
+  return () => {
+    localPresencesSubscribers.delete(callback);
+  };
+}
+
+// Supabase adapters
 function toSupabasePost(p: Post) {
   return {
     id: p.id,
@@ -375,6 +516,7 @@ function fromSupabaseDiscussion(row: any): Discussion {
     currentStage: Number(row.current_stage) as ThreeStepStage,
     isActive: row.is_active,
     allowSubmissions: row.allow_submissions,
+    isBlindToStudents: row.is_blind_to_students !== undefined ? !!row.is_blind_to_students : true,
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
   };
@@ -411,14 +553,13 @@ function fromSupabaseComment(row: any): Comment {
 let isSupabaseSubscribed = false;
 if (supabase && !supabaseConnectionStatus.isUsingFallback) {
   try {
-    // Initial fetch from Supabase
-    supabase.from('discussions').select('*').eq('id', 'current-topic').maybeSingle().then(({ data }) => {
-      if (data) {
-        setLocalDiscussion(fromSupabaseDiscussion(data));
+    supabase.from('discussions').select('*').order('created_at', { ascending: false }).then(({ data }) => {
+      if (data && data.length > 0) {
+        const list = data.map(fromSupabaseDiscussion);
+        setDiscussionsList(list);
       } else {
-        // Seed default discussion
-        void supabase?.from('discussions').upsert(toSupabaseDiscussion(DEFAULT_DISCUSSION)).then(({ error }) => {
-          if (error) console.warn('Supabase default discussion seed note:', error);
+        DEFAULT_DISCUSSIONS.forEach((d) => {
+          void supabase?.from('discussions').upsert(toSupabaseDiscussion(d));
         });
       }
     });
@@ -435,7 +576,6 @@ if (supabase && !supabaseConnectionStatus.isUsingFallback) {
       }
     });
 
-    // Realtime channel
     if (!isSupabaseSubscribed) {
       supabase
         .channel('school_debate_realtime')
@@ -461,7 +601,14 @@ if (supabase && !supabaseConnectionStatus.isUsingFallback) {
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'discussions' }, (payload) => {
           if (payload.new) {
-            setLocalDiscussion(fromSupabaseDiscussion(payload.new));
+            const updated = fromSupabaseDiscussion(payload.new);
+            const list = getDiscussionsList();
+            const exists = list.some((d) => d.id === updated.id);
+            const newList = exists ? list.map((d) => (d.id === updated.id ? updated : d)) : [updated, ...list];
+            setDiscussionsList(newList);
+            if (updated.id === getActiveTopicId()) {
+              setLocalDiscussion(updated);
+            }
           }
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, (payload) => {
@@ -482,8 +629,18 @@ if (supabase && !supabaseConnectionStatus.isUsingFallback) {
 }
 
 /* =========================================================
-   PUBLIC API: DISCUSSIONS, POSTS, COMMENTS
+   PUBLIC API: DISCUSSIONS, TOPIC TABS, POSTS, COMMENTS
    ========================================================= */
+
+export function subscribeDiscussionsList(
+  callback: (list: Discussion[], activeId: string) => void
+): () => void {
+  callback(getDiscussionsList(), getActiveTopicId());
+  localDiscussionsListSubscribers.add(callback);
+  return () => {
+    localDiscussionsListSubscribers.delete(callback);
+  };
+}
 
 export function subscribeDiscussion(
   callback: (discussion: Discussion) => void
@@ -494,7 +651,8 @@ export function subscribeDiscussion(
   let firestoreUnsub: Unsubscribe | null = null;
   if (db && !firebaseConnectionStatus.isUsingFallback) {
     try {
-      const docRef = doc(db, 'discussions', 'current-topic');
+      const activeId = getActiveTopicId();
+      const docRef = doc(db, 'discussions', activeId);
       firestoreUnsub = onSnapshot(docRef, (snapshot) => {
         if (snapshot.exists()) {
           setLocalDiscussion(snapshot.data() as Discussion);
@@ -511,18 +669,106 @@ export function subscribeDiscussion(
   };
 }
 
-export async function updateDiscussion(updates: Partial<Discussion>): Promise<void> {
-  const current = getLocalDiscussion();
+/**
+ * Create a new discussion topic (preserving existing topics & past student opinions!)
+ */
+export async function createDiscussionTopic(topicInput: {
+  title: string;
+  description: string;
+  mode: DiscussionMode;
+  isBlindToStudents?: boolean;
+}): Promise<Discussion> {
+  const newTopicId = `topic_${Date.now()}`;
+  const newDiscussion: Discussion = {
+    id: newTopicId,
+    title: topicInput.title.trim(),
+    description: topicInput.description.trim(),
+    mode: topicInput.mode,
+    currentStage: 1,
+    isActive: true,
+    allowSubmissions: true,
+    isBlindToStudents: topicInput.isBlindToStudents !== undefined ? topicInput.isBlindToStudents : true,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  const currentList = getDiscussionsList();
+  // Deactivate others
+  const updatedList = [
+    newDiscussion,
+    ...currentList.map((d) => ({ ...d, isActive: false })),
+  ];
+
+  setDiscussionsList(updatedList);
+  setActiveTopicId(newTopicId);
+
+  if (supabase && !supabaseConnectionStatus.isUsingFallback) {
+    void supabase
+      .from('discussions')
+      .upsert(toSupabaseDiscussion(newDiscussion))
+      .then(({ error }) => {
+        if (error) console.warn('Supabase create topic note:', error);
+      });
+  }
+
+  return newDiscussion;
+}
+
+/**
+ * Delete a discussion topic and its posts
+ */
+export async function deleteDiscussionTopic(topicId: string): Promise<void> {
+  const currentList = getDiscussionsList();
+  if (currentList.length <= 1) {
+    throw new Error('최소 1개의 토론 안건은 유지되어야 합니다.');
+  }
+
+  const updatedList = currentList.filter((d) => d.id !== topicId);
+  setDiscussionsList(updatedList);
+
+  // If deleted topic was active, switch to the first available topic
+  if (getActiveTopicId() === topicId) {
+    setActiveTopicId(updatedList[0].id);
+  }
+
+  // Delete posts under this topic
+  const posts = getLocalPosts();
+  setLocalPosts(posts.filter((p) => p.discussionId !== topicId));
+
+  if (supabase && !supabaseConnectionStatus.isUsingFallback) {
+    void supabase.from('discussions').delete().eq('id', topicId).then(({ error }) => {
+      if (error) console.warn('Supabase delete discussion note:', error);
+    });
+    void supabase.from('posts').delete().eq('discussion_id', topicId).then(({ error }) => {
+      if (error) console.warn('Supabase delete topic posts note:', error);
+    });
+  }
+}
+
+/**
+ * Update an existing discussion topic
+ */
+export async function updateDiscussion(
+  updates: Partial<Discussion>,
+  targetDiscussionId?: string
+): Promise<void> {
+  const targetId = targetDiscussionId || getActiveTopicId();
+  const list = getDiscussionsList();
+  const current = list.find((d) => d.id === targetId) || getLocalDiscussion();
+  
   const updated: Discussion = {
     ...current,
     ...updates,
     updatedAt: Date.now(),
   };
 
-  // 1. Immediately apply locally
-  setLocalDiscussion(updated);
+  const updatedList = list.map((d) => (d.id === targetId ? updated : d));
+  setDiscussionsList(updatedList);
 
-  // 2. Persist to Supabase if available
+  if (targetId === getActiveTopicId()) {
+    setLocalDiscussion(updated);
+  }
+
   if (supabase && !supabaseConnectionStatus.isUsingFallback) {
     void supabase
       .from('discussions')
@@ -532,15 +778,27 @@ export async function updateDiscussion(updates: Partial<Discussion>): Promise<vo
       });
   }
 
-  // 3. Persist to Firestore if available
   if (db && !firebaseConnectionStatus.isUsingFallback) {
     try {
-      const docRef = doc(db, 'discussions', 'current-topic');
+      const docRef = doc(db, 'discussions', targetId);
       setDoc(docRef, updated, { merge: true }).catch(() => {});
     } catch (err) {
       console.warn('Firestore update discussion note:', err);
     }
   }
+}
+
+/**
+ * Quick toggle for private submission mode vs public reveal
+ */
+export async function toggleDiscussionBlind(targetId?: string): Promise<boolean> {
+  const list = getDiscussionsList();
+  const topicId = targetId || getActiveTopicId();
+  const target = list.find((d) => d.id === topicId) || getLocalDiscussion();
+  const nextBlindState = target.isBlindToStudents === false ? true : false;
+  
+  await updateDiscussion({ isBlindToStudents: nextBlindState }, topicId);
+  return nextBlindState;
 }
 
 export function subscribePosts(
@@ -585,9 +843,12 @@ export async function addPost(
     throw new Error('의견은 300자 이하로 작성해 주세요.');
   }
 
+  const currentTopicId = postInput.discussionId || getActiveTopicId();
+
   const newPostId = `post_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   const newPost: Post = {
     ...postInput,
+    discussionId: currentTopicId,
     id: newPostId,
     content: trimmed,
     likes: 0,
@@ -596,11 +857,9 @@ export async function addPost(
     createdAt: Date.now(),
   };
 
-  // 1. Immediately apply locally
   const posts = getLocalPosts();
   setLocalPosts([newPost, ...posts]);
 
-  // 2. Persist to Supabase if available
   if (supabase && !supabaseConnectionStatus.isUsingFallback) {
     void supabase
       .from('posts')
@@ -610,7 +869,6 @@ export async function addPost(
       });
   }
 
-  // 3. Persist to Firestore if available
   if (db && !firebaseConnectionStatus.isUsingFallback) {
     try {
       const docRef = doc(db, 'posts', newPostId);
@@ -808,10 +1066,15 @@ export async function addComment(commentInput: Omit<Comment, 'id' | 'createdAt'>
 }
 
 export function resetClassroomData(): void {
-  localStorage.setItem(STORAGE_KEY_DISCUSSION, JSON.stringify(DEFAULT_DISCUSSION));
+  localStorage.setItem(STORAGE_KEY_DISCUSSIONS_LIST, JSON.stringify(DEFAULT_DISCUSSIONS));
+  localStorage.setItem(STORAGE_KEY_DISCUSSION, JSON.stringify(DEFAULT_DISCUSSIONS[0]));
+  localStorage.setItem(STORAGE_KEY_ACTIVE_TOPIC_ID, DEFAULT_DISCUSSIONS[0].id);
   localStorage.setItem(STORAGE_KEY_POSTS, JSON.stringify(DEFAULT_POSTS));
   localStorage.setItem(STORAGE_KEY_COMMENTS, JSON.stringify(DEFAULT_COMMENTS));
-  setLocalDiscussion(DEFAULT_DISCUSSION);
+  resetStudentPresences();
+  
+  setDiscussionsList(DEFAULT_DISCUSSIONS);
+  setActiveTopicId(DEFAULT_DISCUSSIONS[0].id);
   setLocalPosts(DEFAULT_POSTS);
   setLocalComments(DEFAULT_COMMENTS);
 }

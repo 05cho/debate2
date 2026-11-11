@@ -29,8 +29,20 @@ export interface Discussion {
   currentStage: ThreeStepStage; // for three_step
   isActive: boolean;
   allowSubmissions: boolean;
+  isBlindToStudents?: boolean; // Default true: students see only their own post until teacher reveals
   createdAt: number;
   updatedAt: number;
+}
+
+export interface StudentPresence {
+  studentNum: number;
+  realName: string;
+  grade: number;
+  classNum: number;
+  anonymousName: string;
+  avatar: string;
+  isOnline: boolean;
+  lastLoginAt: number;
 }
 
 export interface Post {

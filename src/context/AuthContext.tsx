@@ -1,13 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { CurrentUser, StudentInfo } from '../types';
 import { generateAnonymousIdentity } from '../utils/anonymousNames';
+import { recordStudentPresence } from '../services/dataService';
+import { CLASS_ROSTER } from '../data/classRoster';
 
 const STORAGE_KEY_AUTH_USER = 'school_debate_auth_user';
 const STORAGE_KEY_STUDENT_PIN = 'school_debate_student_pin';
 const STORAGE_KEY_TEACHER_PIN = 'school_debate_teacher_pin';
 
 const DEFAULT_STUDENT_PIN = '1234';
-const DEFAULT_TEACHER_PIN = '1234';
+const DEFAULT_TEACHER_PIN = '7287';
 
 interface AuthContextType {
   currentUser: CurrentUser;
@@ -22,12 +24,14 @@ interface AuthContextType {
   toggleTheme: () => void;
   studentPin: string;
   setStudentPin: (newPin: string) => void;
+  teacherPin: string;
+  setTeacherPin: (newPin: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Student PIN setting (customizable by teacher, default: '1234')
+  // Student PIN setting (default: '1234')
   const [studentPin, setStudentPinState] = useState<string>(() => {
     return localStorage.getItem(STORAGE_KEY_STUDENT_PIN) || DEFAULT_STUDENT_PIN;
   });
@@ -38,7 +42,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem(STORAGE_KEY_STUDENT_PIN, trimmed);
   };
 
-  // Initial user state: if no saved user, start as not logged in (so student login is visible!)
+  // Teacher PIN setting (default: '7287')
+  const [teacherPin, setTeacherPinState] = useState<string>(() => {
+    return localStorage.getItem(STORAGE_KEY_TEACHER_PIN) || DEFAULT_TEACHER_PIN;
+  });
+
+  const setTeacherPin = (newPin: string) => {
+    const trimmed = newPin.trim() || DEFAULT_TEACHER_PIN;
+    setTeacherPinState(trimmed);
+    localStorage.setItem(STORAGE_KEY_TEACHER_PIN, trimmed);
+  };
+
+  // Initial user state: if no saved user, start as not logged in
   const [currentUser, setCurrentUser] = useState<CurrentUser>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_AUTH_USER);
     if (saved) {
@@ -47,7 +62,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (parsed.isLoggedIn) return parsed;
       } catch {}
     }
-    // Default: not logged in yet so the login scene is naturally presented!
     return {
       id: '',
       role: 'student',
@@ -98,7 +112,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     const user: CurrentUser = {
-      id: `std_${student.grade}_${student.classNum}_${student.studentNum}_${Date.now()}`,
+      id: `std_${student.grade}_${student.classNum}_${student.studentNum}`,
       role: 'student',
       anonymousName,
       avatar,
@@ -107,32 +121,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setCurrentUser(user);
+    // Record attendance / presence
+    recordStudentPresence(student, anonymousName, avatar);
+
     return { success: true };
   };
 
-  // One-click quick automatic registration for testing / demonstration
+  // One-click quick automatic registration from class roster
   const quickAutoLoginStudent = async () => {
-    const randomGrade = Math.floor(Math.random() * 6) + 1; // 1~6학년
-    const randomClass = Math.floor(Math.random() * 4) + 1; // 1~4반
-    const randomNum = Math.floor(Math.random() * 30) + 1; // 1~30번
-    const sampleNames = ['김하늘', '이준호', '박민서', '정다은', '최서준', '윤지우', '강현우', '오예은'];
-    const randomName = sampleNames[Math.floor(Math.random() * sampleNames.length)] + `(${randomNum}번)`;
+    // Pick an available or random student from the 25 student roster
+    const randomIdx = Math.floor(Math.random() * CLASS_ROSTER.length);
+    const chosen = CLASS_ROSTER[randomIdx];
 
     const student: StudentInfo = {
-      grade: randomGrade,
-      classNum: randomClass,
-      studentNum: randomNum,
-      realName: randomName,
+      grade: 2,
+      classNum: 3,
+      studentNum: chosen.studentNum,
+      realName: chosen.realName,
     };
 
     const { anonymousName, avatar } = generateAnonymousIdentity(
-      randomGrade,
-      randomClass,
-      randomNum
+      2,
+      3,
+      chosen.studentNum
     );
 
     const user: CurrentUser = {
-      id: `std_auto_${Date.now()}`,
+      id: `std_2_3_${chosen.studentNum}`,
       role: 'student',
       anonymousName,
       avatar,
@@ -141,13 +156,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setCurrentUser(user);
+    recordStudentPresence(student, anonymousName, avatar);
+
     return { success: true, user };
   };
 
   const loginAsTeacher = async (pin: string) => {
-    const allowedPins = [DEFAULT_TEACHER_PIN, 'teacher', 'admin', 'teacher1234'];
-    if (!allowedPins.includes(pin.trim())) {
-      return { success: false, error: '교사 관리자 비밀번호가 일치하지 않습니다. (기본값: 1234)' };
+    const trimmed = pin.trim();
+    if (trimmed !== teacherPin && trimmed !== DEFAULT_TEACHER_PIN && trimmed !== 'admin') {
+      return { success: false, error: `교사 비밀번호가 일치하지 않습니다. (기본값: ${teacherPin})` };
     }
 
     const teacherUser: CurrentUser = {
@@ -188,6 +205,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         toggleTheme,
         studentPin,
         setStudentPin,
+        teacherPin,
+        setTeacherPin,
       }}
     >
       {children}
