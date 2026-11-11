@@ -164,7 +164,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginAsTeacher = async (pin: string) => {
     const trimmed = pin.trim();
     if (trimmed !== teacherPin && trimmed !== DEFAULT_TEACHER_PIN && trimmed !== 'admin') {
-      return { success: false, error: `교사 비밀번호가 일치하지 않습니다. (기본값: ${teacherPin})` };
+      return { success: false, error: '교사 관리자 비밀번호가 일치하지 않습니다.' };
     }
 
     const teacherUser: CurrentUser = {

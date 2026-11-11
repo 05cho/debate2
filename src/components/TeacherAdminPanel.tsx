@@ -547,7 +547,7 @@ export const TeacherAdminPanel: React.FC<TeacherAdminPanelProps> = ({
                       onChange={(e) => setCustomTeacherPin(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl border bg-black/5 dark:bg-white/5 border-black/15 dark:border-white/15 focus:outline-none focus:ring-2 focus:ring-purple-500"
                     />
-                    <span className="text-[10px] opacity-60">교사 로그인 시 인증하는 비밀번호입니다. (기본값: 7287)</span>
+                    <span className="text-[10px] opacity-60">교사 로그인 시 인증하는 관리자 비밀번호입니다.</span>
                   </div>
                 </div>
               </div>

@@ -24,8 +24,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, allowCl
   const [realName, setRealName] = useState<string>(currentUser.studentInfo?.realName || '');
   const [pin, setPin] = useState<string>(studentPin || '1234');
 
-  // Teacher form state (default: '7287')
-  const [teacherPin, setTeacherPin] = useState<string>(authTeacherPin || '7287');
+  // Teacher form state (empty by default for security)
+  const [teacherPin, setTeacherPin] = useState<string>('');
 
   const [error, setError] = useState<string | null>(null);
   const [previewIdentity, setPreviewIdentity] = useState<{ anonymousName: string; avatar: string }>({
@@ -108,7 +108,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, allowCl
     if (res.success) {
       onClose();
     } else {
-      setError(res.error || '교사 비밀번호가 일치하지 않습니다. (기본값: 7287)');
+      setError(res.error || '교사 비밀번호가 일치하지 않습니다.');
     }
   };
 
@@ -375,11 +375,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, allowCl
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-xs font-semibold opacity-80">관리자 비밀번호</label>
-                <span className="text-[10px] text-purple-500 font-bold">기본값: 7287</span>
               </div>
               <input
                 type="password"
-                placeholder="비밀번호 입력 (7287)"
+                placeholder="교사 비밀번호를 입력하세요"
                 value={teacherPin}
                 onChange={(e) => setTeacherPin(e.target.value)}
                 autoFocus
@@ -387,7 +386,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, allowCl
                 className="w-full px-3 py-2.5 rounded-xl text-sm border bg-black/5 dark:bg-white/5 border-black/15 dark:border-white/15 focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
               <p className="text-[11px] mt-1 opacity-60">
-                * 교사 전용 비밀번호: <code className="font-mono font-bold text-purple-600 dark:text-purple-300">7287</code>
+                * 학급 안건 관리 및 학생 실명 확인을 위한 교사용 암호입니다.
               </p>
             </div>
 
